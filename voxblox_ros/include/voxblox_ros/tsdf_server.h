@@ -32,30 +32,70 @@
 
 namespace voxblox {
 
+// C++11常量表达式
 constexpr float kDefaultMaxIntensity = 100.0;
 
 class TsdfServer {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+  /**
+   * @brief 构造函数
+   * @param nh                      ros节点句柄
+   * @param nh_private              ros private节点句柄
+   */
   TsdfServer(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private);
+  /**
+   * @brief 另一个构造函数
+   * @param nh                      ros节点句柄
+   * @param nh_private              ros private节点句柄
+   * @param config                  TsdfMap参数
+   * @param integrator_config       TsdfIntegratorBase参数
+   * @param mesh_config             MeshIntegratorConfig参数
+   */
   TsdfServer(const ros::NodeHandle& nh, const ros::NodeHandle& nh_private,
              const TsdfMap::Config& config,
              const TsdfIntegratorBase::Config& integrator_config,
              const MeshIntegratorConfig& mesh_config);
+  //! 析构函数
   virtual ~TsdfServer() {}
 
+  /**
+   * @brief 从ros参数服务器获取参数
+   * @param nh_private              ros private节点句柄
+   */
   void getServerConfigFromRosParam(const ros::NodeHandle& nh_private);
 
+  /**
+   * @brief 插入点云
+   * @param pointcloud              ros中的点云消息类型
+   */
   void insertPointcloud(const sensor_msgs::PointCloud2::Ptr& pointcloud);
 
+  /**
+   * @brief 插入自由空间点云
+   * @param pointcloud
+   */
   void insertFreespacePointcloud(
       const sensor_msgs::PointCloud2::Ptr& pointcloud);
 
+  /**
+   * @brief 虚函数，处理点云消息并插入
+   * @param pointcloud_msg          点云消息
+   * @param T_G_C                   位姿
+   * @param is_freespace_pointcloud 是否为自由空间点云
+   */
   virtual void processPointCloudMessageAndInsert(
       const sensor_msgs::PointCloud2::Ptr& pointcloud_msg,
       const Transformation& T_G_C, const bool is_freespace_pointcloud);
 
+  /**
+   * @brief 整合点云
+   * @param T_G_C                   位姿
+   * @param ptcloud_C               点云
+   * @param colors                  颜色
+   * @param is_freespace_pointcloud 是否为自由空间点云
+   */
   void integratePointcloud(const Transformation& T_G_C,
                            const Pointcloud& ptcloud_C, const Colors& colors,
                            const bool is_freespace_pointcloud = false);
@@ -63,12 +103,14 @@ class TsdfServer {
     // Do nothing.
   }
 
+  /// 发布TsdfVoxels、TsdfSurfacePoints和TsdfOccupiedNodes
   void publishAllUpdatedTsdfVoxels();
   void publishTsdfSurfacePoints();
   void publishTsdfOccupiedNodes();
 
+  /// 虚函数，发布Slices
   virtual void publishSlices();
-  /// Incremental update.
+  /// Incremental update.更新Mesh
   virtual void updateMesh();
   /// Batch update.
   virtual bool generateMesh();
@@ -79,6 +121,7 @@ class TsdfServer {
   virtual bool saveMap(const std::string& file_path);
   virtual bool loadMap(const std::string& file_path);
 
+  /// 各种服务和消息的回调函数
   bool clearMapCallback(std_srvs::Empty::Request& request,           // NOLINT
                         std_srvs::Empty::Response& response);        // NOLINT
   bool saveMapCallback(voxblox_msgs::FilePath::Request& request,     // NOLINT
@@ -96,6 +139,7 @@ class TsdfServer {
   void updateMeshEvent(const ros::TimerEvent& event);
   void publishMapEvent(const ros::TimerEvent& event);
 
+  /// 获取tsdf_map_的智能指针
   std::shared_ptr<TsdfMap> getTsdfMapPtr() { return tsdf_map_; }
   std::shared_ptr<const TsdfMap> getTsdfMapPtr() const { return tsdf_map_; }
 
@@ -108,9 +152,11 @@ class TsdfServer {
     publish_slices_ = publish_slices;
   }
 
+  /// 设置世界坐标系
   void setWorldFrame(const std::string& world_frame) {
     world_frame_ = world_frame;
   }
+  /// 获取世界坐标系
   std::string getWorldFrame() const { return world_frame_; }
 
   /// CLEARS THE ENTIRE MAP!
@@ -123,19 +169,21 @@ class TsdfServer {
   /**
    * Gets the next pointcloud that has an available transform to process from
    * the queue.
+   * 从队列中获取下一个有可用变换的点云
    */
   bool getNextPointcloudFromQueue(
       std::queue<sensor_msgs::PointCloud2::Ptr>* queue,
       sensor_msgs::PointCloud2::Ptr* pointcloud_msg, Transformation* T_G_C);
 
+  /// 设置ros句柄
   ros::NodeHandle nh_;
   ros::NodeHandle nh_private_;
 
-  /// Data subscribers.
+  /// Data subscribers. 点云订阅器
   ros::Subscriber pointcloud_sub_;
   ros::Subscriber freespace_pointcloud_sub_;
 
-  /// Publish markers for visualization.
+  /// Publish markers for visualization. 可视化元素发布器
   ros::Publisher mesh_pub_;
   ros::Publisher tsdf_pointcloud_pub_;
   ros::Publisher surface_pointcloud_pub_;
@@ -143,13 +191,13 @@ class TsdfServer {
   ros::Publisher occupancy_marker_pub_;
   ros::Publisher icp_transform_pub_;
 
-  /// Publish the complete map for other nodes to consume.
+  /// Publish the complete map for other nodes to consume. tsdf地图发布器
   ros::Publisher tsdf_map_pub_;
 
-  /// Subscriber to subscribe to another node generating the map.
+  /// Subscriber to subscribe to another node generating the map. tsdf地图订阅器
   ros::Subscriber tsdf_map_sub_;
 
-  // Services.
+  /// Services. ROS服务
   ros::ServiceServer generate_mesh_srv_;
   ros::ServiceServer clear_map_srv_;
   ros::ServiceServer save_map_srv_;
@@ -157,10 +205,10 @@ class TsdfServer {
   ros::ServiceServer publish_pointclouds_srv_;
   ros::ServiceServer publish_tsdf_map_srv_;
 
-  /// Tools for broadcasting TFs.
+  /// Tools for broadcasting TFs. TF变换发布器
   tf::TransformBroadcaster tf_broadcaster_;
 
-  // Timers.
+  // Timers.  ROS计时器
   ros::Timer update_mesh_timer_;
   ros::Timer publish_map_timer_;
 
