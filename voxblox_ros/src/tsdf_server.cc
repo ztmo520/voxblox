@@ -395,20 +395,32 @@ void TsdfServer::processPointCloudMessageAndInsert(
 }
 
 // Checks if we can get the next message from queue.
+/**
+ * @brief 检查是否可以从队列中获取下一帧消息
+ * @param queue                             队列的指针，模板里类型为PoinCloud2
+ * @param pointcloud_msg                    消息类型PointCloud2的消息指针
+ * @param T_G_C                             位姿
+ * @return
+ */
 bool TsdfServer::getNextPointcloudFromQueue(
     std::queue<sensor_msgs::PointCloud2::Ptr>* queue,
     sensor_msgs::PointCloud2::Ptr* pointcloud_msg, Transformation* T_G_C) {
+  // 最大队列长度为10
   const size_t kMaxQueueSize = 10;
+  // 队列为空，直接返回false
   if (queue->empty()) {
     return false;
   }
+  // 给pointcloud_msg所指向的内容赋值
   *pointcloud_msg = queue->front();
+  // 如果可以获取队列第一个元素的位姿，则返回true，同时pop()
   if (transformer_.lookupTransform((*pointcloud_msg)->header.frame_id,
                                    world_frame_,
                                    (*pointcloud_msg)->header.stamp, T_G_C)) {
     queue->pop();
     return true;
   } else {
+    // 如果队列数量多，则一直pop
     if (queue->size() >= kMaxQueueSize) {
       ROS_ERROR_THROTTLE(60,
                          "Input pointcloud queue getting too long! Dropping "
@@ -422,8 +434,13 @@ bool TsdfServer::getNextPointcloudFromQueue(
   return false;
 }
 
+/**
+ * @brief 插入点云，是pointcloud_sub_的回调函数
+ * @param pointcloud_msg_in                         输入的点云消息
+ */
 void TsdfServer::insertPointcloud(
     const sensor_msgs::PointCloud2::Ptr& pointcloud_msg_in) {
+  // 如果订阅的消息跟上一个消息间隔大于某个阈值，则把它加入队列pointcloud_queue_
   if (pointcloud_msg_in->header.stamp - last_msg_time_ptcloud_ >
       min_time_between_msgs_) {
     last_msg_time_ptcloud_ = pointcloud_msg_in->header.stamp;
@@ -457,6 +474,10 @@ void TsdfServer::insertPointcloud(
   }
 }
 
+/**
+ * @brief 插入自由空间点云，freespace_pointcloud_sub_的回调函数
+ * @param pointcloud_msg_in
+ */
 void TsdfServer::insertFreespacePointcloud(
     const sensor_msgs::PointCloud2::Ptr& pointcloud_msg_in) {
   if (pointcloud_msg_in->header.stamp - last_msg_time_freespace_ptcloud_ >
@@ -494,16 +515,23 @@ void TsdfServer::integratePointcloud(const Transformation& T_G_C,
                                         is_freespace_pointcloud);
 }
 
+/**
+ * @brief 发布更新过的TsdfVoxels
+ */
 void TsdfServer::publishAllUpdatedTsdfVoxels() {
   // Create a pointcloud with distance = intensity.
   pcl::PointCloud<pcl::PointXYZI> pointcloud;
 
+  /// 通过TsdfLayer创建DsitancePointcloud
   createDistancePointcloudFromTsdfLayer(tsdf_map_->getTsdfLayer(), &pointcloud);
 
   pointcloud.header.frame_id = world_frame_;
   tsdf_pointcloud_pub_.publish(pointcloud);
 }
 
+/**
+ * @brief 发布TsdfSurfacePoints
+ */
 void TsdfServer::publishTsdfSurfacePoints() {
   // Create a pointcloud with distance = intensity.
   pcl::PointCloud<pcl::PointXYZRGB> pointcloud;
@@ -516,6 +544,9 @@ void TsdfServer::publishTsdfSurfacePoints() {
   surface_pointcloud_pub_.publish(pointcloud);
 }
 
+/**
+ * @brief 发布TsdfOccupiedNodes
+ */
 void TsdfServer::publishTsdfOccupiedNodes() {
   // Create a pointcloud with distance = intensity.
   visualization_msgs::MarkerArray marker_array;
@@ -524,6 +555,9 @@ void TsdfServer::publishTsdfOccupiedNodes() {
   occupancy_marker_pub_.publish(marker_array);
 }
 
+/**
+ * @brief 发布Slices
+ */
 void TsdfServer::publishSlices() {
   pcl::PointCloud<pcl::PointXYZI> pointcloud;
 
@@ -534,6 +568,10 @@ void TsdfServer::publishSlices() {
   tsdf_slice_pub_.publish(pointcloud);
 }
 
+/**
+ * @brief 发布地图
+ * @param reset_remote_map                      是否重置remote map
+ */
 void TsdfServer::publishMap(bool reset_remote_map) {
   if (!publish_tsdf_map_) {
     return;
@@ -560,6 +598,9 @@ void TsdfServer::publishMap(bool reset_remote_map) {
   num_subscribers_tsdf_map_ = subscribers;
 }
 
+/**
+ * 发布点云
+ */
 void TsdfServer::publishPointclouds() {
   // Combined function to publish all possible pointcloud messages -- surface
   // pointclouds, updated points, and occupied points.
@@ -571,6 +612,9 @@ void TsdfServer::publishPointclouds() {
   }
 }
 
+/**
+ * @brief 更新Mseh
+ */
 void TsdfServer::updateMesh() {
   if (verbose_) {
     ROS_INFO("Updating mesh.");
@@ -600,6 +644,10 @@ void TsdfServer::updateMesh() {
   }
 }
 
+/**
+ * @brief 生成Mesh
+ * @return
+ */
 bool TsdfServer::generateMesh() {
   timing::Timer generate_mesh_timer("mesh/generate");
   const bool clear_mesh = true;
@@ -639,11 +687,21 @@ bool TsdfServer::generateMesh() {
   return true;
 }
 
+/**
+ * @brief 保存地图
+ * @param file_path                     保存文件路径
+ * @return
+ */
 bool TsdfServer::saveMap(const std::string& file_path) {
   // Inheriting classes should add saving other layers to this function.
   return io::SaveLayer(tsdf_map_->getTsdfLayer(), file_path);
 }
 
+/**
+ * @brief 载入地图
+ * @param file_path
+ * @return
+ */
 bool TsdfServer::loadMap(const std::string& file_path) {
   // Inheriting classes should add other layers to load, as this will only
   // load
@@ -658,6 +716,10 @@ bool TsdfServer::loadMap(const std::string& file_path) {
   return success;
 }
 
+/**
+ * @brief 清理Map的回调函数
+ * @return
+ */
 bool TsdfServer::clearMapCallback(std_srvs::Empty::Request& /*request*/,
                                   std_srvs::Empty::Response&
                                   /*response*/) {  // NOLINT
@@ -665,18 +727,32 @@ bool TsdfServer::clearMapCallback(std_srvs::Empty::Request& /*request*/,
   return true;
 }
 
+/**
+ * @brief 生成Mesh的回调函数
+ * @return
+ */
 bool TsdfServer::generateMeshCallback(std_srvs::Empty::Request& /*request*/,
                                       std_srvs::Empty::Response&
                                       /*response*/) {  // NOLINT
   return generateMesh();
 }
 
+/**
+ * @brief 保存Map的回调函数
+ * @param request
+ * @return
+ */
 bool TsdfServer::saveMapCallback(voxblox_msgs::FilePath::Request& request,
                                  voxblox_msgs::FilePath::Response&
                                  /*response*/) {  // NOLINT
   return saveMap(request.file_path);
 }
 
+/**
+ * @brief 载入地图的回调函数
+ * @param request
+ * @return
+ */
 bool TsdfServer::loadMapCallback(voxblox_msgs::FilePath::Request& request,
                                  voxblox_msgs::FilePath::Response&
                                  /*response*/) {  // NOLINT
@@ -684,6 +760,10 @@ bool TsdfServer::loadMapCallback(voxblox_msgs::FilePath::Request& request,
   return success;
 }
 
+/**
+ * @brief 发布点云的回调函数
+ * @return
+ */
 bool TsdfServer::publishPointcloudsCallback(
     std_srvs::Empty::Request& /*request*/, std_srvs::Empty::Response&
     /*response*/) {  // NOLINT
@@ -691,6 +771,10 @@ bool TsdfServer::publishPointcloudsCallback(
   return true;
 }
 
+/**
+ * @brief 发布TsdfMap的回调函数
+ * @return
+ */
 bool TsdfServer::publishTsdfMapCallback(std_srvs::Empty::Request& /*request*/,
                                         std_srvs::Empty::Response&
                                         /*response*/) {  // NOLINT
@@ -698,14 +782,23 @@ bool TsdfServer::publishTsdfMapCallback(std_srvs::Empty::Request& /*request*/,
   return true;
 }
 
+/**
+ * @brief 更新Mesh的事件
+ */
 void TsdfServer::updateMeshEvent(const ros::TimerEvent& /*event*/) {
   updateMesh();
 }
 
+/**
+ * @brief 发布地图的事件
+ */
 void TsdfServer::publishMapEvent(const ros::TimerEvent& /*event*/) {
   publishMap();
 }
 
+/**
+ * @brief 清理函数
+ */
 void TsdfServer::clear() {
   tsdf_map_->getTsdfLayerPtr()->removeAllBlocks();
   mesh_layer_->clear();
@@ -717,6 +810,10 @@ void TsdfServer::clear() {
   }
 }
 
+/**
+ * @brief tsdf地图的回调函数
+ * @param layer_msg
+ */
 void TsdfServer::tsdfMapCallback(const voxblox_msgs::Layer& layer_msg) {
   timing::Timer receive_map_timer("map/receive_tsdf");
 
